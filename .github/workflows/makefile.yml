@@ -22,7 +22,7 @@ jobs:
     - name: Pre-build Extraction Tools Natively
       run: |
         cd tools
-        make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc tabledesign extract_data_for_mio textconv patch_libultra_math -j4
+        make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
         cd ..
 
     - name: Bypass Python Tool Compilation
