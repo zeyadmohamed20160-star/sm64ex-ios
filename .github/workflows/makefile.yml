@@ -27,19 +27,22 @@ jobs:
 
     - name: Create Custom Local Tool Override Paths
       run: |
-        # Create a mock gmake runner directly inside a custom runner pathway
         mkdir -p $GITHUB_WORKSPACE/mock_bin
         echo '#!/bin/bash' > $GITHUB_WORKSPACE/mock_bin/gmake
-        echo 'echo "Bypassing gmake sub-call, tools already built..."' >> $GITHUB_WORKSPACE/mock_bin/gmake
+        echo 'echo "Bypassing gmake sub-call..."' >> $GITHUB_WORKSPACE/mock_bin/gmake
         echo 'exit 0' >> $GITHUB_WORKSPACE/mock_bin/gmake
         chmod +x $GITHUB_WORKSPACE/mock_bin/gmake
-        
-        # Force the custom path to take absolute priority over system tools
         echo "$GITHUB_WORKSPACE/mock_bin" >> $GITHUB_PATH
 
     - name: Run Game Asset Extractor
       run: |
         python3 extract_assets.py us
+
+    - name: Fix Hardcoded Linux Compiler Paths for Mac
+      run: |
+        # Replace hardcoded cpp-12 or cpp-10 references with standard Mac cpp tool
+        find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
+        find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-10/cpp/g' {} + || true
 
     - name: Compile Custom Saturn App Binary
       run: |
@@ -73,4 +76,3 @@ jobs:
       with:
         name: Saturn-iOS-Install-File
         path: Saturn.ipa
-
