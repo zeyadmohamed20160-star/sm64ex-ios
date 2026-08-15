@@ -19,6 +19,14 @@ jobs:
       run: |
         pip install mako layouts
 
+    - name: Restore Missing Core SDK Headers
+      run: |
+        # Fetch the original clean include folder from upstream to restore ultra64.h
+        mkdir -p temp_include
+        git archive --remote=https://github.com HEAD include | tar -x -C temp_include
+        cp -rn temp_include/include/* include/ || true
+        rm -rf temp_include
+
     - name: Pre-build Extraction Tools Natively
       run: |
         cd tools
@@ -83,4 +91,3 @@ jobs:
       with:
         name: Saturn-iOS-Install-File
         path: Saturn.ipa
-
