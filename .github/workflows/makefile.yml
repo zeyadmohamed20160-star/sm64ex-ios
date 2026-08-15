@@ -49,21 +49,21 @@ jobs:
 
     - name: Force Global Header and Preprocessor Rules
       run: |
-        mkdir -p build/us_pc build/us_ios
+        # Generate the full recursive nested build path directories to prevent output directory failures
+        mkdir -p build/us_pc/src/engine build/us_pc/src/game build/us_pc/src/audio build/us_ios
         touch build/us_pc/level_rules.mk build/us_ios/level_rules.mk
+        
+        # Safe replacement mapping loops without breaking Makefile rules
         find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
         find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
-        find . -name "Makefile*" -type f -exec sed -i '' 's/CC_CHECK :=/CC_CHECK := -Iinclude/g' {} + || true
-        find . -name "Makefile*" -type f -exec sed -i '' 's/CFLAGS =/CFLAGS = -Iinclude/g' {} + || true
-        find . -name "Makefile*" -type f -exec sed -i '' 's/I include/Iinclude/g' {} + || true
 
     - name: Final Native iOS Compilation
       run: |
         export C_INCLUDE_PATH=$(pwd)/include:$C_INCLUDE_PATH
         export CPLUS_INCLUDE_PATH=$(pwd)/include:$CPLUS_INCLUDE_PATH
         
-        # Hard link frameworks directly into target arguments to bypass clang stripping linker flags
-        make TARGET_IOS=1 TARGET_APPLE=1 VERSION=us LDFLAGS="-framework OpenGL -framework OpenGLES -framework CoreGraphics -framework UIKit" -j4
+        # Force include arguments straight into the compilation call flags directly
+        make TARGET_IOS=1 TARGET_APPLE=1 VERSION=us CFLAGS="-Iinclude" LDFLAGS="-framework OpenGL -framework OpenGLES -framework CoreGraphics -framework UIKit" -j4
 
     - name: Package Payload and IPA
       run: |
@@ -80,3 +80,4 @@ jobs:
       with:
         name: Saturn-iOS-Install-File
         path: Saturn.ipa
+
