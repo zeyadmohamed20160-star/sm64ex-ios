@@ -17,7 +17,7 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        brew install mingw-w64 sdl2 pkg-config audiofile
+        brew install mingw-w64 sdl2 pkg-config
         pip install mako layouts
 
     - name: Extract Assets
