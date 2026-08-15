@@ -25,14 +25,15 @@ jobs:
         make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
         cd ..
 
-    - name: Bypass Python Tool Compilation
+    - name: Install and Map gmake Utility
       run: |
-        # We manually modify the python script in place so it skips compiling tools and uses the ones we just built
-        sed -i '' 's/subprocess.check_call(\[\x27gmake\x27/#/g' extract_assets.py
-        sed -i '' 's/CC=gcc-15/#/g' extract_assets.py
-        sed -i '' 's/CXX=g++-15/#/g' extract_assets.py
-        # Create a hard gmake link as a backup
-        sudo ln -sf /usr/bin/make /usr/local/bin/gmake
+        # Download and drop in an official compiled binary for gmake to bypass apple limits
+        sudo curl -sL https://githubusercontent.com -o /usr/local/bin/gmake
+        sudo chmod +x /usr/local/bin/gmake
+        
+        # Link the compiler aliases so if the script calls gcc-15 or g++-15 it maps to basic system tools
+        sudo ln -sf /usr/bin/gcc /usr/local/bin/gcc-15
+        sudo ln -sf /usr/bin/g++ /usr/local/bin/g++-15
 
     - name: Run Game Asset Extractor
       run: |
