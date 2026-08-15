@@ -19,21 +19,21 @@ jobs:
       run: |
         pip install mako layouts
 
-    - name: Restore Missing Core SDK Headers
+    - name: Restore Core SDK Headers
       run: |
-        # Fetch the original clean include folder from upstream to restore ultra64.h
+        # Force-fetch original headers from upstream to fix 'ultra64.h not found'
         mkdir -p temp_include
-        git archive --remote=https://github.com HEAD include | tar -x -C temp_include
+        git archive --remote=https://github.com/sm64pc/sm64ex.git HEAD include | tar -x -C temp_include
         cp -rn temp_include/include/* include/ || true
         rm -rf temp_include
 
-    - name: Pre-build Extraction Tools Natively
+    - name: Pre-build Extraction Tools
       run: |
         cd tools
         make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
         cd ..
 
-    - name: Create Custom Local Tool Override Paths
+    - name: Create gmake Bypass
       run: |
         mkdir -p $GITHUB_WORKSPACE/mock_bin
         echo '#!/bin/bash' > $GITHUB_WORKSPACE/mock_bin/gmake
@@ -46,48 +46,28 @@ jobs:
       run: |
         python3 extract_assets.py us
 
-    - name: Fix Hardcoded Linux Compiler Paths for Mac
+    - name: Fix Compiler Paths for Mac
       run: |
-        # Pre-create directory paths to satisfy Makefile rules
         mkdir -p build/us_pc build/us_ios
-        
-        # Point level_rules.mk directly to an empty template to skip the clang preprocessor crash
         touch build/us_pc/level_rules.mk build/us_ios/level_rules.mk
-        
-        # Force the build configuration files to use native mac preprocessor arguments
         find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
         find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-10/cpp/g' {} + || true
         find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
 
-    - name: Compile Custom Saturn App Binary
+    - name: Final Compilation (Saturn IPA)
       run: |
-        make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" -j4
+        # Use CCFLAGS to force include paths and fix 'ultra64.h' errors
+        make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" CCFLAGS="-Iinclude" -j4
 
-    - name: Construct Final App Payload Directory
+    - name: Package Payload
       run: |
         mkdir -p Payload/Saturn.app
-        if [ -d "build/us_ios" ]; then
-          cp -r build/us_ios/* Payload/Saturn.app/
-        elif [ -d "build/us" ]; then
-          cp -r build/us/* Payload/Saturn.app/
-        else
-          echo "Sweeping custom build folder configurations..."
-          find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
-          find build/ -type f -permalink +111 -exec cp {} Payload/Saturn.app/ \; || true
-        fi
-
-    - name: Bind Interactive Onscreen Joystick Templates
-      run: |
-        cp -r assets/* Payload/Saturn.app/assets/ 2>/dev/null || true
-        cp -r res/* Payload/Saturn.app/ 2>/dev/null || true
-
-    - name: Compress and Finalize IPA Sideload Package
-      run: |
-        chmod +x Payload/Saturn.app/* 2>/dev/null || true
+        find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
+        find build/ -type f -executable -exec cp {} Payload/Saturn.app/ \; || true
         zip -r Saturn.ipa Payload
 
-    - name: Deploy Completed Installation File
+    - name: Upload Result
       uses: actions/upload-artifact@v4
       with:
-        name: Saturn-iOS-Install-File
+        name: Saturn-iOS-App
         path: Saturn.ipa
