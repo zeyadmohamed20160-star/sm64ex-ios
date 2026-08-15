@@ -61,7 +61,7 @@ jobs:
 
     - name: Compile Custom Saturn App Binary
       run: |
-        make TARGET_IOS=1 VERSION=us CPP="cpp -xc" -j4
+        make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" -j4
 
     - name: Construct Final App Payload Directory
       run: |
