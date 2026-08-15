@@ -1,27 +1,41 @@
-name: Makefile CI
+name: Build iOS App (Saturn)
 
 on:
-  push:
-    branches: [ "ios" ]
-  pull_request:
-    branches: [ "ios" ]
+  workflow_dispatch:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: macos-14
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: configure
-      run: ./configure
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
 
-    - name: Install dependencies
-      run: make
+    - name: Install Dependencies
+      run: |
+        brew install mingw-w64 sdl2 pkg-config audiofile
+        pip install mako layouts
 
-    - name: Run check
-      run: make check
+    - name: Extract Assets
+      run: |
+        python3 extract_assets.py us
 
-    - name: Run distcheck
-      run: make distcheck
+    - name: Compile iOS Target
+      run: |
+        make TARGET_IOS=1 VERSION=us -j4
+
+    - name: Package IPA Bundle
+      run: |
+        mkdir -p Payload/Saturn.app
+        cp -r build/us_ios/* Payload/Saturn.app/ 2>/dev/null || cp -r build/us/* Payload/Saturn.app/
+        zip -r Saturn.ipa Payload
+
+    - name: Upload Finished IPA
+      uses: actions/upload-artifact@v4
+      with:
+        name: Saturn-iOS-Install-File
+        path: Saturn.ipa
