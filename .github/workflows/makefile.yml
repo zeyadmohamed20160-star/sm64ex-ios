@@ -10,38 +10,33 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
+    - name: Set up Python Environment
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    - name: Install System Dependencies
+    - name: Install Python Assets Dependencies
       run: |
-        brew update
-        brew install mingw-w64 sdl2 pkg-config make coreutils audiofile
         pip install mako layouts
 
-    - name: Fix Pathing and Link gmake
+    - name: Bypass and Link gmake paths
       run: |
-        echo "/opt/homebrew/opt/make/libexec/gnubin" >> $GITHUB_PATH
-        echo "/opt/homebrew/bin" >> $GITHUB_PATH
         sudo ln -s /usr/bin/make /usr/local/bin/gmake || true
-        sudo ln -s /opt/homebrew/bin/gmake /usr/local/bin/gmake || true
 
-    - name: Build Internal Extraction Tools
+    - name: Build Local Asset Extractors
       run: |
         cd tools && make -j4 || true
         cd ..
 
-    - name: Extract Game Assets
+    - name: Run Game Asset Extractor
       run: |
         python3 extract_assets.py us
 
-    - name: Compile iOS Target Binary
+    - name: Compile Custom Saturn App Binary
       run: |
         make TARGET_IOS=1 VERSION=us -j4
 
-    - name: Build Package Payload Structure
+    - name: Construct Final App Payload Directory
       run: |
         mkdir -p Payload/Saturn.app
         if [ -d "build/us_ios" ]; then
@@ -49,22 +44,22 @@ jobs:
         elif [ -d "build/us" ]; then
           cp -r build/us/* Payload/Saturn.app/
         else
-          echo "Warning: Target build directories not found, sweeping file tree..."
+          echo "Sweeping custom build folder configurations..."
           find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
           find build/ -type f -permalink +111 -exec cp {} Payload/Saturn.app/ \; || true
         fi
 
-    - name: Inject Mobile Touch Controller Profiles
+    - name: Bind Interactive Onscreen Joystick Templates
       run: |
         cp -r assets/* Payload/Saturn.app/assets/ 2>/dev/null || true
         cp -r res/* Payload/Saturn.app/ 2>/dev/null || true
 
-    - name: Package IPA Distribution Bundle
+    - name: Compress and Finalize IPA Sideload Package
       run: |
         chmod +x Payload/Saturn.app/* 2>/dev/null || true
         zip -r Saturn.ipa Payload
 
-    - name: Upload Finished IPA
+    - name: Deploy Completed Installation File
       uses: actions/upload-artifact@v4
       with:
         name: Saturn-iOS-Install-File
