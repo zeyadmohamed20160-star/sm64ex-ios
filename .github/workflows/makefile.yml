@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14 # Native Apple Silicon runners for iOS compilation
+    runs-on: macos-14
 
     steps:
     - name: Checkout Code
@@ -18,28 +18,24 @@ jobs:
 
     - name: Install System Dependencies
       run: |
-        # sm64ex-based builds on macOS require these specific Homebrew packages
         brew install gcc make sdl2 glew glfw pkg-config mingw-w64 dylibbundler
         pip install mako layouts
 
     - name: Restore Core SDK Headers
       run: |
-        # Injects missing 'ultra64.h' and 'PR/ultratypes.h'
         mkdir -p temp_include
-        git archive --remote=https://github.com/sm64pc/sm64ex.git HEAD include | tar -x -C temp_include
+        git archive --remote=https://github.com HEAD include | tar -x -C temp_include
         cp -rn temp_include/include/* include/ || true
         rm -rf temp_include
 
     - name: Pre-build Extraction Tools
       run: |
-        # Build tools using standard Mac compilers (gcc/g++)
         cd tools
         make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
         cd ..
 
     - name: Fix gmake and Pathing Errors
       run: |
-        # Forces the system to recognize 'make' as 'gmake' for script compatibility
         mkdir -p $GITHUB_WORKSPACE/mock_bin
         echo '#!/bin/bash' > $GITHUB_WORKSPACE/mock_bin/gmake
         echo 'exit 0' >> $GITHUB_WORKSPACE/mock_bin/gmake
@@ -49,33 +45,33 @@ jobs:
 
     - name: Run Game Asset Extractor
       run: |
-        # Ensure baserom.us.z64 is in the root directory before running
         python3 extract_assets.py us
 
-    - name: Fix Clang Preprocessor and Path Incompatibility
+    - name: Force Global Header and Preprocessor Rules
       run: |
-        # Pre-create directory paths and touch level_rules.mk to avoid clang 'c' error
         mkdir -p build/us_pc build/us_ios
         touch build/us_pc/level_rules.mk build/us_ios/level_rules.mk
-        
-        # Replace hardcoded Linux paths with standard macOS 'cpp' and fix include syntax
         find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
         find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
+        find . -name "Makefile*" -type f -exec sed -i '' 's/CC_CHECK :=/CC_CHECK := -Iinclude/g' {} + || true
+        find . -name "Makefile*" -type f -exec sed -i '' 's/CFLAGS =/CFLAGS = -Iinclude/g' {} + || true
+        find . -name "Makefile*" -type f -exec sed -i '' 's/I include/Iinclude/g' {} + || true
 
     - name: Final Native iOS Compilation
       run: |
-        # Fixes the 'clang: error' by correcting -x c placement and forcing include paths
-        export C_INCLUDE_PATH=$C_INCLUDE_PATH:$(pwd)/include
-        make TARGET_IOS=1 VERSION=us CPP="cpp -x c -Iinclude" CCFLAGS="-Iinclude" EXTRA_CFLAGS="-Iinclude" -j4
+        export C_INCLUDE_PATH=$(pwd)/include:$C_INCLUDE_PATH
+        export CPLUS_INCLUDE_PATH=$(pwd)/include:$CPLUS_INCLUDE_PATH
+        
+        # Hard link frameworks directly into target arguments to bypass clang stripping linker flags
+        make TARGET_IOS=1 TARGET_APPLE=1 VERSION=us LDFLAGS="-framework OpenGL -framework OpenGLES -framework CoreGraphics -framework UIKit" -j4
 
     - name: Package Payload and IPA
       run: |
-        # Constructs the .app bundle and ensures touch joystick assets are included
         mkdir -p Payload/Saturn.app
         find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
+        find build/ -type f -maxdepth 4 -perm +111 -exec cp {} Payload/Saturn.app/ \; || true
         cp -r assets/* Payload/Saturn.app/assets/ 2>/dev/null || true
         cp -r res/* Payload/Saturn.app/ 2>/dev/null || true
-        # Zip it up as a standard IPA for Sideloadly/AltStore
         chmod +x Payload/Saturn.app/* 2>/dev/null || true
         zip -r Saturn.ipa Payload
 
