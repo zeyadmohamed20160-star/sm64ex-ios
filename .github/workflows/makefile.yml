@@ -17,20 +17,21 @@ jobs:
 
     - name: Install System Dependencies
       run: |
-        # sm64ex on macOS specifically requires these packages
-        brew install gcc make audiofile sdl2 glew glfw pkg-config mingw-w64 dylibbundler
+        # Using adamstark-audiofile as the modern replacement for the disabled 'audiofile'
+        brew install gcc make adamstark-audiofile sdl2 glew glfw pkg-config mingw-w64 dylibbundler
         pip install mako layouts
 
     - name: Restore Core SDK Headers
       run: |
         mkdir -p temp_include
-        git archive --remote=https://github.com/sm64pc/sm64ex.git HEAD include | tar -x -C temp_include
+        git archive --remote=https://github.com HEAD include | tar -x -C temp_include
         cp -rn temp_include/include/* include/ || true
         rm -rf temp_include
 
     - name: Pre-build Extraction Tools
       run: |
         cd tools
+        # We manually build the tools needed for extraction, skipping the problematic audio tools
         make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
         cd ..
 
@@ -54,9 +55,9 @@ jobs:
         find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
 
     - name: Final Compilation (Saturn IPA)
-    # Using C_INCLUDE_PATH as an environment variable can often bypass flag issues in Makefiles
       run: |
         export C_INCLUDE_PATH=$C_INCLUDE_PATH:$(pwd)/include
+        # Explicitly telling the compiler to search our include folder for ultra64.h
         make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" CCFLAGS="-Iinclude" EXTRA_CFLAGS="-Iinclude" -j4
 
     - name: Package Payload
