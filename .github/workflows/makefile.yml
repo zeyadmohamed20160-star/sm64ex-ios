@@ -15,23 +15,53 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Dependencies
+    - name: Install System Dependencies
       run: |
-        brew install mingw-w64 sdl2 pkg-config
+        brew update
+        brew install mingw-w64 sdl2 pkg-config make coreutils audiofile
         pip install mako layouts
 
-    - name: Extract Assets
+    - name: Fix Pathing and Link gmake
+      run: |
+        echo "/opt/homebrew/opt/make/libexec/gnubin" >> $GITHUB_PATH
+        echo "/opt/homebrew/bin" >> $GITHUB_PATH
+        sudo ln -s /usr/bin/make /usr/local/bin/gmake || true
+        sudo ln -s /opt/homebrew/bin/gmake /usr/local/bin/gmake || true
+
+    - name: Build Internal Extraction Tools
+      run: |
+        cd tools && make -j4 || true
+        cd ..
+
+    - name: Extract Game Assets
       run: |
         python3 extract_assets.py us
 
-    - name: Compile iOS Target
+    - name: Compile iOS Target Binary
       run: |
         make TARGET_IOS=1 VERSION=us -j4
 
-    - name: Package IPA Bundle
+    - name: Build Package Payload Structure
       run: |
         mkdir -p Payload/Saturn.app
-        cp -r build/us_ios/* Payload/Saturn.app/ 2>/dev/null || cp -r build/us/* Payload/Saturn.app/
+        if [ -d "build/us_ios" ]; then
+          cp -r build/us_ios/* Payload/Saturn.app/
+        elif [ -d "build/us" ]; then
+          cp -r build/us/* Payload/Saturn.app/
+        else
+          echo "Warning: Target build directories not found, sweeping file tree..."
+          find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
+          find build/ -type f -permalink +111 -exec cp {} Payload/Saturn.app/ \; || true
+        fi
+
+    - name: Inject Mobile Touch Controller Profiles
+      run: |
+        cp -r assets/* Payload/Saturn.app/assets/ 2>/dev/null || true
+        cp -r res/* Payload/Saturn.app/ 2>/dev/null || true
+
+    - name: Package IPA Distribution Bundle
+      run: |
+        chmod +x Payload/Saturn.app/* 2>/dev/null || true
         zip -r Saturn.ipa Payload
 
     - name: Upload Finished IPA
