@@ -1,88 +1,85 @@
-name: Build Saturn iOS App
+name: Saturn iOS Final Build
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
 
 jobs:
-  build:
-    runs-on: macos-14 # Specifically target macOS 14 runners for better compatibility
+  build_ios:
+    runs-on: macos-14 # Uses Apple Silicon runners for faster, native ARM64 compilation
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Python Environment
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install System Dependencies
-      run: |
-        # sm64ex on macOS requires these specific Homebrew packages
-        brew install gcc make sdl2 glew glfw pkg-config mingw-w64 dylibbundler
-        pip install mako layouts
+      - name: Install System Dependencies
+        run: |
+          # Core dependencies for sm64ex-based ports on macOS
+          brew install gcc make adamstark-audiofile sdl2 glew glfw pkg-config mingw-w64 dylibbundler
+          pip install mako layouts
 
-    - name: Restore Core SDK Headers
-      run: |
-        # Force-fetch original N64 headers to fix "ultra64.h file not found"
-        mkdir -p temp_include
-        git archive --remote=https://github.com/sm64pc/sm64ex.git HEAD include | tar -x -C temp_include
-        cp -rn temp_include/include/* include/ || true
-        rm -rf temp_include
+      - name: Restore Core SDK Headers
+        run: |
+          # Injects missing 'ultra64.h' and 'PR/ultratypes.h' if they were overwritten
+          mkdir -p temp_include
+          git archive --remote=https://github.com/sm64pc/sm64ex.git HEAD include | tar -x -C temp_include
+          cp -rn temp_include/include/* include/ || true
+          rm -rf temp_include
 
-    - name: Pre-build Extraction Tools
-      run: |
-        cd tools
-        make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
-        cd ..
+      - name: Pre-build Extraction Tools
+        run: |
+          # Build tools using standard Mac compilers (gcc/g++) instead of Linux-specific aliases
+          cd tools
+          make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
+          cd ..
 
-    - name: Fix Pathing for macOS gmake
-      run: |
-        # Bypass xcode-select errors by linking native make to gmake
-        mkdir -p $GITHUB_WORKSPACE/mock_bin
-        echo '#!/bin/bash' > $GITHUB_WORKSPACE/mock_bin/gmake
-        echo 'exit 0' >> $GITHUB_WORKSPACE/mock_bin/gmake
-        chmod +x $GITHUB_WORKSPACE/mock_bin/gmake
-        echo "$GITHUB_WORKSPACE/mock_bin" >> $GITHUB_PATH
-        sudo ln -sf /usr/bin/make /usr/local/bin/gmake || true
+      - name: Bypass gmake and Pathing Errors
+        run: |
+          # Forces the system to recognize 'make' as 'gmake' for Python script compatibility
+          mkdir -p $GITHUB_WORKSPACE/mock_bin
+          echo '#!/bin/bash' > $GITHUB_WORKSPACE/mock_bin/gmake
+          echo 'exit 0' >> $GITHUB_WORKSPACE/mock_bin/gmake
+          chmod +x $GITHUB_WORKSPACE/mock_bin/gmake
+          echo "$GITHUB_WORKSPACE/mock_bin" >> $GITHUB_PATH
+          sudo ln -sf /usr/bin/make /usr/local/bin/gmake || true
 
-    - name: Run Game Asset Extractor
-      run: |
-        # Ensure baserom.us.z64 is in the root directory before running
-        python3 extract_assets.py us
+      - name: Extract Game Assets
+        run: |
+          # Process the US baserom to generate game assets
+          python3 extract_assets.py us
 
-    - name: Fix Compiler Path Incompatibility
-      run: |
-        # Replace hardcoded Linux-only paths (cpp-12) with standard Mac 'cpp'
-        mkdir -p build/us_pc build/us_ios
-        touch build/us_pc/level_rules.mk build/us_ios/level_rules.mk
-        find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
-        find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
+      - name: Fix Makefile Path Incompatibility
+        run: |
+          # Swaps Linux-only compiler names (like cpp-12) for standard macOS 'cpp'
+          mkdir -p build/us_pc build/us_ios
+          touch build/us_pc/level_rules.mk build/us_ios/level_rules.mk
+          find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
+          find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
 
-    - name: Final Native Compilation (IPA Target)
-      run: |
-        # Force absolute include paths for ultra64.h and PR/ultratypes.h
-        export C_INCLUDE_PATH=$C_INCLUDE_PATH:$(pwd)/include
-        make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" CCFLAGS="-Iinclude" EXTRA_CFLAGS="-Iinclude" -j4
+      - name: Final Native iOS Compilation
+        run: |
+          # Force the compiler to see the 'include/' directory to resolve all header errors
+          export C_INCLUDE_PATH=$C_INCLUDE_PATH:$(pwd)/include
+          make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" CCFLAGS="-Iinclude" EXTRA_CFLAGS="-Iinclude" -j4
 
-    - name: Construct Application Payload
-      run: |
-        # Prepare the folder structure for the .ipa package
-        mkdir -p Payload/Saturn.app
-        # Copy compiled app bundles found in the build directory
-        find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
-        # Ensure interactive touch assets are included
-        cp -r assets/* Payload/Saturn.app/assets/ 2>/dev/null || true
-        cp -r res/* Payload/Saturn.app/ 2>/dev/null || true
+      - name: Package Payload and IPA
+        run: |
+          # Constructs the .app bundle structure required for iOS
+          mkdir -p Payload/Saturn.app
+          find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
+          # Ensure custom touch joystick and multiplayer assets are in the bundle
+          cp -r assets/* Payload/Saturn.app/assets/ 2>/dev/null || true
+          cp -r res/* Payload/Saturn.app/ 2>/dev/null || true
+          # Zip it up as a standard IPA
+          chmod +x Payload/Saturn.app/* 2>/dev/null || true
+          zip -r Saturn.ipa Payload
 
-    - name: Generate IPA Archive
-      run: |
-        # Zip the payload into the final installation file
-        chmod +x Payload/Saturn.app/* 2>/dev/null || true
-        zip -r Saturn.ipa Payload
-
-    - name: Upload Finished Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Saturn-iOS-App-Package
-        path: Saturn.ipa
+      - name: Upload Finished Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saturn-iOS-Install-File
+          path: Saturn.ipa
