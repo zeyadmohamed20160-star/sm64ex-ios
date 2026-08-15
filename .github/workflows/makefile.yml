@@ -38,6 +38,7 @@ jobs:
       run: |
         mkdir -p $GITHUB_WORKSPACE/mock_bin
         echo '#!/bin/bash' > $GITHUB_WORKSPACE/mock_bin/gmake
+        echo 'echo "Bypassing gmake sub-call..."' >> $GITHUB_WORKSPACE/mock_bin/gmake
         echo 'exit 0' >> $GITHUB_WORKSPACE/mock_bin/gmake
         chmod +x $GITHUB_WORKSPACE/mock_bin/gmake
         echo "$GITHUB_WORKSPACE/mock_bin" >> $GITHUB_PATH
@@ -59,15 +60,17 @@ jobs:
 
     - name: Final Native iOS Compilation
       run: |
-        export C_INCLUDE_PATH=$(pwd)/include:$C_INCLUDE_PATH
-        export CPLUS_INCLUDE_PATH=$(pwd)/include:$CPLUS_INCLUDE_PATH
+        # Map include paths cleanly in terminal memory paths
+        export C_INCLUDE_PATH=$(pwd)/include:$(pwd)/src:$C_INCLUDE_PATH
+        export CPLUS_INCLUDE_PATH=$(pwd)/include:$(pwd)/src:$CPLUS_INCLUDE_PATH
         
-        # Force include arguments straight into the compilation call flags directly
-        make TARGET_IOS=1 TARGET_APPLE=1 VERSION=us CFLAGS="-Iinclude" LDFLAGS="-framework OpenGL -framework OpenGLES -framework CoreGraphics -framework UIKit" -j4
+        # Build compilation trigger with NON_MATCHING=1 and expanded absolute directory visibility flags
+        make TARGET_IOS=1 TARGET_APPLE=1 VERSION=us NON_MATCHING=1 EXTRA_CFLAGS="-Iinclude -Isrc -I." LDFLAGS="-framework OpenGL -framework OpenGLES -framework CoreGraphics -framework UIKit" -j4
 
     - name: Package Payload and IPA
       run: |
         mkdir -p Payload/Saturn.app
+        # Sweep build trees to catch the actual compiled executable output
         find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
         find build/ -type f -maxdepth 4 -perm +111 -exec cp {} Payload/Saturn.app/ \; || true
         cp -r assets/* Payload/Saturn.app/assets/ 2>/dev/null || true
