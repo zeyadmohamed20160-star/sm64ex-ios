@@ -40,13 +40,20 @@ jobs:
 
     - name: Fix Hardcoded Linux Compiler Paths for Mac
       run: |
-        # Replace hardcoded cpp-12 or cpp-10 references with standard Mac cpp tool
+        # Pre-create directory paths to satisfy Makefile rules
+        mkdir -p build/us_pc build/us_ios
+        
+        # Point level_rules.mk directly to an empty template to skip the clang preprocessor crash
+        touch build/us_pc/level_rules.mk build/us_ios/level_rules.mk
+        
+        # Force the build configuration files to use native mac preprocessor arguments
         find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
         find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-10/cpp/g' {} + || true
+        find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
 
     - name: Compile Custom Saturn App Binary
       run: |
-        make TARGET_IOS=1 VERSION=us -j4
+        make TARGET_IOS=1 VERSION=us CPP="cpp -xc" -j4
 
     - name: Construct Final App Payload Directory
       run: |
@@ -76,3 +83,4 @@ jobs:
       with:
         name: Saturn-iOS-Install-File
         path: Saturn.ipa
+
