@@ -15,13 +15,14 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Python Assets Dependencies
+    - name: Install System Dependencies
       run: |
+        # sm64ex on macOS specifically requires these packages
+        brew install gcc make audiofile sdl2 glew glfw pkg-config mingw-w64 dylibbundler
         pip install mako layouts
 
     - name: Restore Core SDK Headers
       run: |
-        # Force-fetch original headers from upstream to fix 'ultra64.h not found'
         mkdir -p temp_include
         git archive --remote=https://github.com/sm64pc/sm64ex.git HEAD include | tar -x -C temp_include
         cp -rn temp_include/include/* include/ || true
@@ -37,7 +38,6 @@ jobs:
       run: |
         mkdir -p $GITHUB_WORKSPACE/mock_bin
         echo '#!/bin/bash' > $GITHUB_WORKSPACE/mock_bin/gmake
-        echo 'echo "Bypassing gmake sub-call..."' >> $GITHUB_WORKSPACE/mock_bin/gmake
         echo 'exit 0' >> $GITHUB_WORKSPACE/mock_bin/gmake
         chmod +x $GITHUB_WORKSPACE/mock_bin/gmake
         echo "$GITHUB_WORKSPACE/mock_bin" >> $GITHUB_PATH
@@ -51,19 +51,18 @@ jobs:
         mkdir -p build/us_pc build/us_ios
         touch build/us_pc/level_rules.mk build/us_ios/level_rules.mk
         find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-12/cpp/g' {} + || true
-        find . -name "Makefile*" -type f -exec sed -i '' 's/cpp-10/cpp/g' {} + || true
         find . -name "Makefile*" -type f -exec sed -i '' 's/-I \./-I\./g' {} + || true
 
     - name: Final Compilation (Saturn IPA)
+    # Using C_INCLUDE_PATH as an environment variable can often bypass flag issues in Makefiles
       run: |
-        # Use CCFLAGS to force include paths and fix 'ultra64.h' errors
-        make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" CCFLAGS="-Iinclude" -j4
+        export C_INCLUDE_PATH=$C_INCLUDE_PATH:$(pwd)/include
+        make TARGET_IOS=1 VERSION=us CPP="cpp -xc -Iinclude" CCFLAGS="-Iinclude" EXTRA_CFLAGS="-Iinclude" -j4
 
     - name: Package Payload
       run: |
         mkdir -p Payload/Saturn.app
         find build/ -name "*.app" -exec cp -r {}/ Payload/Saturn.app/ \; || true
-        find build/ -type f -executable -exec cp {} Payload/Saturn.app/ \; || true
         zip -r Saturn.ipa Payload
 
     - name: Upload Result
