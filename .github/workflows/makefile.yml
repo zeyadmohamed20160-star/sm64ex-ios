@@ -25,13 +25,12 @@ jobs:
         make CC=gcc CXX=g++ n64graphics skyconv mio0 aifc_decode aiff_extract_codebook vadpcm_enc extract_data_for_mio textconv patch_libultra_math -j4
         cd ..
 
-    - name: Install and Map gmake Utility
+    - name: Setup System Links for gmake and gcc
       run: |
-        # Download and drop in an official compiled binary for gmake to bypass apple limits
-        sudo curl -sL https://githubusercontent.com -o /usr/local/bin/gmake
-        sudo chmod +x /usr/local/bin/gmake
+        # Point the gmake command directly to the Mac's native make tool
+        sudo ln -sf /usr/bin/make /usr/local/bin/gmake
         
-        # Link the compiler aliases so if the script calls gcc-15 or g++-15 it maps to basic system tools
+        # Link the compiler aliases so if the script calls gcc-15 it maps to system tools
         sudo ln -sf /usr/bin/gcc /usr/local/bin/gcc-15
         sudo ln -sf /usr/bin/g++ /usr/local/bin/g++-15
 
